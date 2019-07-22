@@ -1,0 +1,101 @@
+import requests
+from bs4 import BeautifulSoup
+from urllib.request import quote
+import json
+
+# 得到所有的页码  ,
+# Param:
+#       num  输入要查询的地点---根据数字来确定地理坐标  该值是页面p_area= 中的值 用来做定向查询
+#       myrange  查询的范围即--需要多少页信息  最多101 即100条
+#       mycookie 是cook值
+
+# 由于请求头再不同页面会有所不同所以需要再请求头处多做更改
+def get_all_url(num=None, myrange=None, mycookie=None):
+    if num is not None and range is not None and mycookie is not None:
+        # 所有连接的列表储存于此
+        all_href = []
+        # 请求头
+        hd = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.90 Safari/537.36',
+            'Cookie': mycookie,
+        }
+        # 连接p=?的数字多少决定访问的页码
+        url = "http://search.qianlima.com/search.jsp?q=%C2%B7%B5%C6&p_xs=1&p_area="+str(num)+"&q_kat=0&q_mod=0&p="
+        i = 1
+        # 只能抓前100
+        for i in range(1, myrange):
+            print("正在进入当前第 %d 页" % i)
+            rp = requests.get(url + str(i), headers=hd)
+            html = rp.text
+            content = BeautifulSoup(html, 'lxml').select("#list tbody tr")
+            for i in content:
+                if len(i.select("td")) > 0:
+                    # 搜寻td标签中第0个的文本内容只取中标信息
+                    if i.select("td")[0].getText() == "中标":
+                        href = i.select("td")[1].select("a")[0].get_attribute_list("href")[0]
+                        all_href.append(href)
+        return all_href
+    else:
+        raise ValueError("get_all_url请输入正确的值")
+
+# 得到子页中电话信息
+def get_phone_msg(names, mycookies):
+    o = open("three.txt", "wb")
+    url = ""
+    try:
+        for name in names:
+            # 将%BB%AA%C8%D9%BF%C6%BC%BC%B9%C9%B7%DD%D3%D0%CF%DE%B9%AB%CB%BE 该形式转换成
+            # %25BB%25AA%25C8%25D9%25BF%25C6%25BC%25BC%25B9%25C9%25B7%25DD%25D3%25D0%25CF%25DE%25B9%25AB%25CB%25BE
+            comanyname = quote(name, encoding="gbk")
+            hd = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.90 Safari/537.36',
+                'Cookie': mycookies,
+            }
+            url = "http://center.qianlima.com/preview_qy.jsp?gsmc=" + comanyname
+            rp = requests.get(url, headers=hd)
+            rjson = rp.text[5:-1:]
+            # 将字符串变成字典
+            result = json.loads(rjson)
+            o.write(str(result).encode())
+            o.write(b"\r")
+    except Exception as e:
+        print(url)
+        print(e)
+
+# 得到子页信息并把没有电话连接的剔除
+def get_zhongbiaoInfo_page(urls):
+    # 把所有中标公司的span中的名字获得
+    # 均为%BB%AA%C8%D9%BF%C6%BC%BC%B9%C9%B7%DD%D3%D0%CF%DE%B9%AB%CB%BE形式
+    names = []
+    hd = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.90 Safari/537.36',
+        'Cookie': 'UM_distinctid=16b53946d168f8-05f1c7459a99c4-37c153e-144000-16b53946d17689; gr_user_id=2635e139-e701-4bef-bab0-88d4e2cb5420; Hm_lvt_5dc1b78c0ab996bd6536c3a37f9ceda7=1560733565; cookie_insert_log=0; __jsluid=d7530cbb0ee9c6d1546b91e06d15ec22; Hm_lvt_0a38bdb0467f2ce847386f381ff6c0e8=1560733569; CNZZDATA1848524=cnzz_eid%3D14827877-1560732859-http%253A%252F%252Fwww.qianlima.com%252F%26ntime%3D1560732859; CNZZDATA1277608403=936828098-1560730483-http%253A%252F%252Fwww.qianlima.com%252F%7C1560730483; qlm_username=hebeiyangli; qlm_password=gmuBRU3fjfEB7fBEEg7ogu7KCpuC883g; rem_login=1; seo_intime="2019-06-17 09:31:44"; gr_session_id_83e3b26ab9124002bae03256fc549065=06b33244-622f-45e2-849a-1ce12becc8b7; gr_session_id_83e3b26ab9124002bae03256fc549065_06b33244-622f-45e2-849a-1ce12becc8b7=true; JSESSIONID=833200B8EE8765EF0EDF24DEE0C5F353.tomcat2; seo_refUrl=; seo_curUrl=www.qianlima.com; Hm_lpvt_0a38bdb0467f2ce847386f381ff6c0e8=1560741163; qlmll_his=",131523612,133790357,133793204,133793086,133788886,133800612,133807570,133805257,132267313,133741465,"; fromWhereUrl="http://www.qianlima.com/zb/detail/20190531_131523612.html"; Hm_lpvt_5dc1b78c0ab996bd6536c3a37f9ceda7=1560741169'
+    }
+    for url in urls:
+        rp = requests.get(url, headers=hd)
+        html = rp.text
+        #
+        soup = BeautifulSoup(html, 'lxml')
+        # 通过span标签找到target属性从而找到该span
+        result = soup.select('span[target="_blank"]')
+        if len(result) > 0:
+            for a in result:
+                # 得到name属性中的值由于是list所以给0得到该值
+                companyName = a.get_attribute_list("name")[0]
+                names.append(companyName)
+        else:
+            print("该信息中没有可用的电话连接->None")
+    print("共得到 %d 条信息" % len(names))
+    return names
+
+if __name__ == '__main__':
+    # 插入主页的cook
+    cook1 = 'UM_distinctid=16b53946d168f8-05f1c7459a99c4-37c153e-144000-16b53946d17689; gr_user_id=2635e139-e701-4bef-bab0-88d4e2cb5420; Hm_lvt_5dc1b78c0ab996bd6536c3a37f9ceda7=1560733565; cookie_insert_log=0; Hm_lvt_0a38bdb0467f2ce847386f381ff6c0e8=1560733569; qlm_username=hebeiyangli; qlm_password=gmuBRU3fjfEB7fBEEg7ogu7KCpuC883g; rem_login=1; __jsluid=ecd38154329a6bd6754d91108fb6c4c3; qlmll_his=",133058754,133197967,133101140,133443581,133166279,133564291,133571303,133610317,133805070,133517331,"; seo_intime="2019-06-17 16:59:39"; BAIDU_SSP_lcr=https://www.baidu.com/link?url=A-YE_SqUMxEF0mzX77AfAFdfr-gdVkxq7kzUhbzh-PDwpmKZgTGZgnVBJKktbzl1&wd=&eqid=c91404b40009d7b4000000035d083757; gr_session_id_83e3b26ab9124002bae03256fc549065=b25cb254-57ec-4812-a1a7-b8aba5fa5724; seo_refUrl=https%3A//www.baidu.com/link%3Furl%3DA-YE_SqUMxEF0mzX77AfAFdfr-gdVkxq7kzUhbzh-PDwpmKZgTGZgnVBJKktbzl1%26wd%3D%26eqid%3Dc91404b40009d7b4000000035d083757; seo_curUrl=www.qianlima.com; gr_session_id_83e3b26ab9124002bae03256fc549065_b25cb254-57ec-4812-a1a7-b8aba5fa5724=true; __jsl_clearance=1560819555.843|0|WOGkF94CBbJ6lcC%2F933UrMbPu%2F4%3D; CNZZDATA1848524=cnzz_eid%3D2049550503-1560730598-http%253A%252F%252Fsearch.qianlima.com%252F%26ntime%3D1560817099; CNZZDATA1277608403=954079201-1560730483-http%253A%252F%252Fsearch.qianlima.com%252F%7C1560816901; JSESSIONID=AADB538D14641DE73B4959ACE9C123ED.tomcat1; fromWhereUrl="http://search.qianlima.com/search.jsp?p_xs=1&p_area=9&p_state=-1&p_tflt=-1&q_mod=0&q_kat=0&p_type=0&q=%C2%B7%B5%C6"; Hm_lpvt_0a38bdb0467f2ce847386f381ff6c0e8=1560819569; Hm_lpvt_5dc1b78c0ab996bd6536c3a37f9ceda7=1560819569'
+    mlists = get_all_url(26, 101, mycookie=cook1)
+    names = get_zhongbiaoInfo_page(mlists,)
+    # 插入详细信息页的cook
+    cook2 = 'JSESSIONID=0178B90DD8225BB6A511843342329031.tomcat2; UM_distinctid=16b53946d168f8-05f1c7459a99c4-37c153e-144000-16b53946d17689; __jsluid=00be5ad1ca4ee2d583954e5755ae341d; gr_user_id=2635e139-e701-4bef-bab0-88d4e2cb5420; Hm_lvt_5dc1b78c0ab996bd6536c3a37f9ceda7=1560733565; cookie_insert_log=0; Hm_lvt_0a38bdb0467f2ce847386f381ff6c0e8=1560733569; qlm_username=hebeiyangli; qlm_password=gmuBRU3fjfEB7fBEEg7ogu7KCpuC883g; rem_login=1; seo_intime="2019-06-17 16:59:39"; BAIDU_SSP_lcr=https://www.baidu.com/link?url=A-YE_SqUMxEF0mzX77AfAFdfr-gdVkxq7kzUhbzh-PDwpmKZgTGZgnVBJKktbzl1&wd=&eqid=c91404b40009d7b4000000035d083757; CNZZDATA1848524=cnzz_eid%3D1632671960-1560730598-%26ntime%3D1560817099; gr_session_id_83e3b26ab9124002bae03256fc549065=b25cb254-57ec-4812-a1a7-b8aba5fa5724; CNZZDATA1277608403=1864933816-1560730483-%7C1560816901; seo_refUrl=https%3A//www.baidu.com/link%3Furl%3DA-YE_SqUMxEF0mzX77AfAFdfr-gdVkxq7kzUhbzh-PDwpmKZgTGZgnVBJKktbzl1%26wd%3D%26eqid%3Dc91404b40009d7b4000000035d083757; seo_curUrl=www.qianlima.com; gr_session_id_83e3b26ab9124002bae03256fc549065_b25cb254-57ec-4812-a1a7-b8aba5fa5724=true; Hm_lpvt_0a38bdb0467f2ce847386f381ff6c0e8=1560819600; qlmll_his=",133932384,133953292,133058754,133197967,133101140,133443581,133166279,133564291,133571303,133610317,"; fromWhereUrl="http://www.qianlima.com/zb/detail/20190617_133932384.html"; Hm_lpvt_5dc1b78c0ab996bd6536c3a37f9ceda7=1560819637'
+    get_phone_msg(names, mycookies=cook2)
+
+
+
